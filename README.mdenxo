@@ -1,1 +1,127 @@
+-- ESP Avançado com Linha Verde, Nome, Caixa Verde Pequena e Distância
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local Camera = workspace.CurrentCamera
+local LocalPlayer = Players.LocalPlayer
+local ESPEnabled = true
+local tracers = {}
 
+-- Criar botão na tela
+local function createToggleButton()
+    local ScreenGui = Instance.new("ScreenGui", LocalPlayer:WaitForChild("PlayerGui"))
+    ScreenGui.Name = "ESP_ToggleUI"
+
+    local Button = Instance.new("TextButton", ScreenGui)
+    Button.Size = UDim2.new(0, 120, 0, 40)
+    Button.Position = UDim2.new(0, 10, 0, 10)
+    Button.BackgroundColor3 = Color3.fromRGB(0, 200, 0)
+    Button.Text = "Toggle ESP"
+    Button.TextScaled = true
+    Button.TextColor3 = Color3.new(1, 1, 1)
+    Button.Font = Enum.Font.SourceSansBold
+    Button.ZIndex = 999
+
+    Button.MouseButton1Click:Connect(function()
+        ESPEnabled = not ESPEnabled
+        for _, data in pairs(tracers) do
+            data.tracer.Visible = ESPEnabled
+            if data.nameGui then data.nameGui.Enabled = ESPEnabled end
+            if data.box then data.box.Visible = ESPEnabled end
+        end
+        Button.BackgroundColor3 = ESPEnabled and Color3.fromRGB(0, 200, 0) or Color3.fromRGB(200, 0, 0)
+    end)
+end
+
+local function createESP(player)
+    if player == LocalPlayer then return end
+
+    local function apply(char)
+        local hrp = char:WaitForChild("HumanoidRootPart", 5)
+        local head = char:WaitForChild("Head", 5)
+        if not hrp or not head then return end
+
+        -- Tracer
+        local tracerLine = Drawing.new("Line")
+        tracerLine.Color = Color3.fromRGB(0, 255, 0)
+        tracerLine.Thickness = 2
+        tracerLine.Transparency = 1
+        tracerLine.Visible = ESPEnabled
+
+        -- Nome
+        local nameTag = Instance.new("BillboardGui", head)
+        nameTag.Name = "ESP_Name"
+        nameTag.Size = UDim2.new(0, 150, 0, 25)
+        nameTag.StudsOffset = Vector3.new(0, 2.5, 0)
+        nameTag.AlwaysOnTop = true
+        nameTag.Enabled = ESPEnabled
+
+        local label = Instance.new("TextLabel", nameTag)
+        label.Size = UDim2.new(1, 0, 1, 0)
+        label.BackgroundTransparency = 1
+        label.TextColor3 = Color3.new(0, 1, 0)
+        label.TextStrokeColor3 = Color3.new(0, 0, 0)
+        label.TextStrokeTransparency = 0.3
+        label.TextScaled = true
+        label.Font = Enum.Font.SourceSansBold
+
+        -- Caixa
+        local box = Instance.new("BoxHandleAdornment")
+        box.Name = "ESP_Box"
+        box.Adornee = char
+        box.Size = char:GetExtentsSize() * 0.6
+        box.AlwaysOnTop = true
+        box.ZIndex = 10
+        box.Transparency = 0.4
+        box.Color3 = Color3.fromRGB(0, 255, 0)
+        box.Visible = ESPEnabled
+        box.Parent = char
+
+        -- Atualização da Distância
+        local conn = RunService.RenderStepped:Connect(function()
+            if not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") then
+                tracerLine.Visible = false
+                return
+            end
+
+            local dist = math.floor((LocalPlayer.Character.HumanoidRootPart.Position - player.Character.HumanoidRootPart.Position).Magnitude)
+            local screenPos, onScreen = Camera:WorldToViewportPoint(hrp.Position)
+            label.Text = player.Name .. " [" .. dist .. "m]"
+
+            if onScreen and ESPEnabled then
+                tracerLine.From = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y)
+                tracerLine.To = Vector2.new(screenPos.X, screenPos.Y)
+                tracerLine.Visible = true
+            else
+                tracerLine.Visible = false
+            end
+        end)
+
+        tracers[player] = {
+            tracer = tracerLine,
+            conn = conn,
+            nameGui = nameTag,
+            box = box
+        }
+    end
+
+    player.CharacterAdded:Connect(apply)
+    if player.Character then apply(player.Character) end
+end
+
+for _, plr in ipairs(Players:GetPlayers()) do
+    createESP(plr)
+end
+
+Players.PlayerAdded:Connect(createESP)
+
+Players.PlayerRemoving:Connect(function(plr)
+    if tracers[plr] then
+        tracers[plr].tracer:Remove()
+        tracers[plr].conn:Disconnect()
+        if tracers[plr].nameGui then tracers[plr].nameGui:Destroy() end
+        if tracers[plr].box then tracers[plr].box:Destroy() end
+        tracers[plr] = nil
+    end
+end)
+
+createToggleButton()
